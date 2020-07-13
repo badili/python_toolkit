@@ -9,7 +9,10 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from jinja2 import Environment, PackageLoader
 
-from vendor.terminal_output import Terminal
+try:
+    from vendor.terminal_output import Terminal
+except Exception:
+    from .terminal_output import Terminal
 
 terminal = Terminal()
 
