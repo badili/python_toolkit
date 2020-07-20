@@ -2,6 +2,9 @@ import smtplib
 import os
 import sys
 import re
+import shutil
+import requests
+import boto3
 
 from django.conf import settings
 
@@ -140,3 +143,38 @@ def validate_phone_number(phone_no):
         return None
     else:
         return '+254%s' % phone_number[0]
+
+def download_image_from_url(settings_):
+    # given a URL, downloads the image and saves it to the defined path or AWS
+    try:
+        # retrieve the image name to use
+        path_ = os.path.split(settings_['img_url'])
+        local_path = '%s/%s' % (settings_['path'], path_[1])
+        response = requests.get(settings_['img_url'], stream=True)
+        
+        if response.status_code == 200:
+            with open(local_path, 'wb') as out_file:
+                shutil.copyfileobj(response.raw, out_file)
+
+            if 'upload_2_s3' in settings_ and settings_['upload_2_s3']:
+                # push it to s3
+                client = boto3.client('s3', region_name=settings.AWS_S3_REGION_NAME)
+                img_name = path_[1]
+                img_path = '%s/%s' % (settings_['s3_path'], path_[1])
+                s3_response = client.upload_file(path_[1], settings.AWS_STORAGE_BUCKET_NAME, img_path, ExtraArgs={'ACL':'public-read'})
+
+            del response
+
+            if 'del_local_file' in settings_ and settings_['del_local_file']:
+                os.remove(local_path)
+            return (img_name, img_path)
+        else:
+            del response
+            raise "There was an error while downloading the image '%s' from the server" % settings_['img_url']
+            
+    except ClientError as e:
+        if settings.DEBUG: terminal.tprint(str(e), 'debug')
+        raise 
+    except Exception as e:
+        if settings.DEBUG: terminal.tprint(str(e), 'fail')
+        raise
