@@ -6,6 +6,7 @@ import shutil
 import requests
 import boto3
 
+from botocore.exceptions import ClientError
 from django.conf import settings
 
 from email.mime.multipart import MIMEMultipart
@@ -167,10 +168,10 @@ def download_image_from_url(settings_):
 
             if 'del_local_file' in settings_ and settings_['del_local_file']:
                 os.remove(local_path)
-            return (img_name, img_path)
+            return (img_name, img_path, None)
         else:
             del response
-            raise "There was an error while downloading the image '%s' from the server" % settings_['img_url']
+            return (None, None, "There was an error while downloading the image '%s' from the server" % settings_['img_url'])
             
     except ClientError as e:
         if settings.DEBUG: terminal.tprint(str(e), 'debug')
