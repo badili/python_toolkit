@@ -23,7 +23,7 @@ terminal = Terminal()
 
 class Emails():
     def __init__(self):
-        terminal.tprint("Initializing the core ODK parser", 'ok')
+        terminal.tprint("Initializing the Email class", 'ok')
 
     def send_email(to, sender, cc, subject=None, body=None):
         ''' sends email using a Jinja HTML template '''
@@ -74,11 +74,8 @@ class Emails():
         templ = templateEnv.get_template(template_path)
         return templ.render(**kwargs)
 
-        print((1))
         env = Environment(loader=PackageLoader('poultry', 'templates'))
-        print((2))
         template = env.get_template(template)
-        print((3))
         return template.render(params)
 
         # templateLoader = jinja2.FileSystemLoader(settings.)
