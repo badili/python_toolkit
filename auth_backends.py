@@ -16,7 +16,6 @@ class UsernameEmailTelBackend(ModelBackend):
         try:
             # the tel can be +2547xxxx or 07xxx convert to an international format
             phone_no = validate_phone_number(username)
-            print("%s -- %s" % (username, phone_no))
             if not phone_no:
                 cur_user = User.objects.filter(Q(nickname=username)|Q(email=username)|Q(username=username)).get()
             else:
