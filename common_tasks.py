@@ -9,6 +9,12 @@ import boto3
 from botocore.exceptions import ClientError
 from django.conf import settings
 
+# import django-rq if we are using queues
+try:
+    import django_rq
+except Exception:
+    pass
+
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from jinja2 import Environment, PackageLoader
@@ -25,7 +31,7 @@ class Emails():
     def __init__(self):
         terminal.tprint("Initializing the Email class", 'ok')
 
-    def send_email(to, sender, cc, subject=None, body=None):
+    def send_email(to, sender, cc, subject=None, body=None, add_to_queue=False):
         ''' sends email using a Jinja HTML template '''
         # convert TO into list if string
         if type(to) is not list:
@@ -46,17 +52,28 @@ class Emails():
         msg.attach(MIMEText(body, 'html'))
         try:
             terminal.tprint('setting up the SMTP con....', 'debug')
-            server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
-            # server.set_debuglevel(1)
-            # server.ehlo()
-            server.starttls()
-            server.login(settings.SENDER_EMAIL, settings.SENDER_PASSWORD)
-            server.sendmail(settings.SITE_NAME, to_list, msg.as_string())
+            if add_to_queue:
+                django_rq.enqueue(queue_email, to_list, msg)
+            else:
+                server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
+                server.starttls()
+                server.login(settings.SENDER_EMAIL, settings.SENDER_PASSWORD)
+                server.sendmail(settings.SITE_NAME, to_list, msg.as_string())
+                server.quit()
         except Exception as e:
             terminal.tprint('Error sending email -- %s' % str(e), 'error')
             raise Exception('Error sending email -- %s' % str(e))
-        finally:
-            server.quit()
+            
+
+def queue_email(to_list, msg):
+    try:
+        server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
+        server.starttls()
+        server.login(settings.SENDER_EMAIL, settings.SENDER_PASSWORD)
+        server.sendmail(settings.SITE_NAME, to_list, msg.as_string())
+        server.quit()
+    except Exception:
+        raise
 
     def render_template(self, template, params, **kwargs):
         ''' renders a Jinja template into HTML '''
@@ -77,12 +94,6 @@ class Emails():
         env = Environment(loader=PackageLoader('poultry', 'templates'))
         template = env.get_template(template)
         return template.render(params)
-
-        # templateLoader = jinja2.FileSystemLoader(settings.)
-        # print templateLoader
-        # templateEnv = jinja2.Environment(loader=templateLoader)
-        # templ = templateEnv.get_template(template)
-        # return templ.render(**kwargs)
 
 
 class ProgressBar():
