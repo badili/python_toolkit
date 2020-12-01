@@ -52,7 +52,7 @@ class Emails():
         msg.attach(MIMEText(body, 'html'))
         try:
             terminal.tprint('setting up the SMTP con....', 'debug')
-            if add_to_queue:
+            if add_to_queue == True:
                 django_rq.enqueue(queue_email, to_list, msg)
             else:
                 server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
