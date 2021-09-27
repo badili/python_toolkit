@@ -39,8 +39,6 @@ class ObtainAuthToken(APIView):
         )
 
     def post(self, request, *args, **kwargs):
-        print("Authenticating a user")
-        print(request.data)
         serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']

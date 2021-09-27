@@ -5,9 +5,13 @@ import re
 import shutil
 import requests
 import boto3
+import json
+import sentry_sdk
 
 from botocore.exceptions import ClientError
 from django.conf import settings
+from decimal import Decimal
+
 
 # import django-rq if we are using queues
 try:
@@ -22,9 +26,13 @@ from jinja2 import Environment, PackageLoader
 try:
     from vendor.terminal_output import Terminal
 except Exception:
-    from .terminal_output import Terminal
+    try:
+        from toolkit.terminal_output import Terminal
+    except Exception:
+        from .terminal_output import Terminal
 
 terminal = Terminal()
+sentry_sdk.init(settings.SENTRY_DSN)
 
 
 class Emails():
@@ -145,6 +153,14 @@ class SQLManipulations():
         ]
 
 
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return str(obj)
+        
+        return json.JSONEncoder.default(self, obj)
+
+
 def validate_phone_number(phone_no):
     # given any phone number, validates it and returns a valid number else returns None
     phone_number = re.findall('^\(?(?:\+?254|0)((?:7|1)\)?(?:[ -]?[0-9]){2}\)?(?:[ -]?[0-9]){6})$', phone_no)
@@ -187,3 +203,19 @@ def download_image_from_url(settings_):
     except Exception as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
         raise
+
+def send_sentry_message(message='Test message', err_level='info', extra_data=None, tags=None, user_data=None):
+    with sentry_sdk.push_scope() as scope:
+        if tags:
+            for tag in tags:
+                scope.set_tag(tag['tag'], tag['value'])
+            
+        if user_data:
+            for u in user_data:
+                scope.user = {u['tag'] : u['value']}
+
+        if extra_data:
+            for ed in extra_data:
+                scope.set_extra(ed['tag'], ed['value'])
+
+        sentry_sdk.capture_message(message, err_level)
