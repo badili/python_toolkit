@@ -1,16 +1,24 @@
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
 from django_registration.exceptions import ActivationError
 from django_registration.backends.activation.views import RegistrationView, ActivationView
+from django.shortcuts import render, redirect
 from django.utils.encoding import force_bytes, force_text
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.urls import reverse
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from sentry_sdk import init as sentry_init, capture_exception as sentry_ce
+
+# from rolepermissions.checkers import has_permission
+# from rolepermissions.decorators import has_role_decorator
+from rolepermissions.roles import get_user_roles, assign_role, remove_role, clear_roles
+from rolepermissions.permissions import available_perm_names
+# from rolepermissions.mixins import HasRoleMixin as has_role
+
 from toolkit.terminal_output import Terminal
 
 terminal = Terminal()
@@ -245,6 +253,53 @@ def recover_password(request):
     return render(request, 'recover_password.html', params)
 
 
+@login_required(login_url='/login')
+def get_set_user_info(request):
+    """ Get the basic information for the current logged in user
+    """
+    try:
+        if request.session.session_key is not None:
+            # update the session details
+            User = get_user_model()
+            cur_user = User.objects.get(id=request.user.id)
+            
+            request.session['cu_designation'] = cur_user.get_designation_display()
+            request.session['cu_designation_id'] = cur_user.designation
+            request.session['cu_last_name'] = cur_user.last_name
+            request.session['cu_first_name'] = cur_user.first_name
+            request.session['cu_email'] = cur_user.email
+            request.session['cu_issuperuser'] = cur_user.is_superuser
+            if cur_user.is_superuser:
+                request.session['cu_designation'] = 'Super Administrator'
+            cur_user_email = cur_user.email
+
+        elif request.session.get('cu_email') is not None:
+            cur_user_email = request.session['cu_email']
+        else:
+            cur_user_email = None
+
+        global user_permissions
+        if cur_user_email: user_permissions = available_perm_names(cur_user)
+        else: user_permissions = []
+
+        if settings.DEBUG:
+            if cur_user.is_superuser and len(user_permissions) == 0:
+                user_permissions = ['all']
+
+        return (cur_user_email, user_permissions)
+
+    except Personnel.DoesNotExist as e:
+        terminal.tprint("%s: A user who is not vetted is trying to log in. Kick them out." % str(e), 'fail')
+        return None
+
+    except Exception as e:
+        send_sentry_message(str(e))
+        if settings.DEBUG: logging.error(traceback.format_exc())
+        # we need a default page to go to
+        return render(request, 'dashboard/dashboard.html', params)
+
+
+@login_required(login_url='/login')
 def update_user(request, user_id):
     try:
         UserModel = get_user_model()
