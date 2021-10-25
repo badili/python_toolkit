@@ -1,8 +1,10 @@
+import sys, inspect, importlib
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.hashers import make_password
+from django.contrib.sites.shortcuts import get_current_site
 from django.core.exceptions import ValidationError
 from django_registration.exceptions import ActivationError
 from django_registration.backends.activation.views import RegistrationView, ActivationView
@@ -11,7 +13,8 @@ from django.utils.encoding import force_bytes, force_text
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.urls import reverse
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from sentry_sdk import init as sentry_init, capture_exception as sentry_ce
+from sentry_sdk import init as sentry_init, capture_exception
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
 
 # from rolepermissions.checkers import has_permission
 # from rolepermissions.decorators import has_role_decorator
@@ -20,6 +23,7 @@ from rolepermissions.permissions import available_perm_names
 # from rolepermissions.mixins import HasRoleMixin as has_role
 
 from toolkit.terminal_output import Terminal
+from vendor.notifications import Notification
 
 terminal = Terminal()
 
@@ -41,19 +45,30 @@ sentry_init(settings.SENTRY_DSN, environment=settings.ENV_ROLE)
 User = get_user_model()
 
 
+def get_or_create_csrf_token(request):
+    token = request.META.get('CSRF_COOKIE', None)
+    if token is None:
+        # Getting a new token
+        token = csrf.get_token(request)
+        request.META['CSRF_COOKIE'] = token
+
+    request.META['CSRF_COOKIE_USED'] = True
+    return token
+
+
 def login_page(request, *args, **kwargs):
     csrf_token = get_or_create_csrf_token(request)
     page_settings = {'page_title': "%s | Login Page" % settings.SITE_NAME, 'csrf_token': csrf_token}
 
     try:
         # check if we have some username and password in kwargs
-        if 'kwargs' in kwargs:
-            # use the explicitly passed username and password over the form filled ones
-            username = kwargs['kwards']['user']['username']
-            password = kwargs['kwards']['user']['pass']
-        else:
+        # use the explicitly passed username and password over the form filled ones
+        try:
+            username = kwargs['user']['username']
+            password = kwargs['user']['pass']
+        except Exception:
             username = request.POST['username']
-            password = request.POST['pass']
+            password = request.POST['pass']    
 
         if 'message' in kwargs:
             page_settings['message'] = kwargs['message']
@@ -73,7 +88,7 @@ def login_page(request, *args, **kwargs):
         else:
             return render(request, 'login.html', {username: username})
     except KeyError as e:
-        if settings.DEBUG: sentry.captureException()
+        if settings.DEBUG: capture_exception(e)
         # ask the user to enter the username and/or password
         terminal.tprint('\nUsername/password not defined: %s' % str(e), 'warn')
         page_settings['message'] = page_settings['message'] if 'message' in page_settings else "Please enter your username and password"
@@ -106,10 +121,16 @@ def update_password(uid, password, token):
     try:
         User = get_user_model()
         uuid = force_text(urlsafe_base64_decode(uid))
-        user = User.objects.get(id=uuid)
+        try:
+            user = User.objects.get(id=uuid)
+        except ValueError: 
+            user = User.objects.get(email=uuid)
 
         user.set_password(password)
         user.save()
+
+        if user.check_password(password) == False:
+            raise Exception('Your password has not been updated')
         
         # send an email that the account has been activated
         email_settings = {
@@ -128,7 +149,7 @@ def update_password(uid, password, token):
 
     except Exception as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry.captureException()
+        capture_exception(e)
         raise
 
 
@@ -157,21 +178,21 @@ def activate_user(request, user, token):
         notify.send_email(email_settings)
         
         uid = urlsafe_base64_encode(force_bytes(user.email))
-        return HttpResponseRedirect(reverse('new_user_password', kwargs={'uid': uid}))
-    
+        return HttpResponseRedirect('/new_user_password/%s/%s' % (uid, token))
+
     except ActivationError as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry.captureException()
+        capture_exception(e)
         return reverse('home', kwargs={'error': True, 'message': e.message})
 
     except User.DoesNotExist as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry.captureException()
+        capture_exception(e)
         return reverse('home', kwargs={'error': True, 'message': 'The specified user doesnt exist' })
 
     except Exception as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry.captureException()
+        capture_exception(e)
         return reverse('home', kwargs={'error': True, 'message': 'There was an error while activating your account. Contact the system administrator' })
 
 
@@ -187,9 +208,13 @@ def new_user_password(request, uid=None, token=None):
             # we have a user id and token, so we can present the new password page
             params['token'] = token
             params['user'] = uid
-            return render(request, 'new_password.html', params)
+            return render(request, 'recover_password.html', params)
+        # elif uid:
+        #     uuid = force_text(urlsafe_base64_decode(uid))
+        #     user = User.objects.get(id=uuid)
         else:
             # lets send an email with the reset link
+            # print(request.POST.get('email'))
             user = User.objects.filter(email=request.POST.get('email')).get()
             notify = Notification()
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -214,13 +239,13 @@ def new_user_password(request, uid=None, token=None):
 
     except User.DoesNotExist as e:
         params['error'] = True
-        sentry.captureException()
+        capture_exception(e)
         params['message'] = 'Sorry, but the specified user is not found in our system'
-        return render(request, 'recover_password.html', params)
+        return render(request, 'new_password.html', params)
 
     except Exception as e:
         if settings.DEBUG: print(str(e))
-        sentry.captureException()
+        capture_exception(e)
         return render(request, 'login.html', {'is_error': True, 'message': 'There was an error while saving the new password'})
 
 
@@ -236,12 +261,13 @@ def save_user_password(request):
             params['token'] = request.POST.get('token')
             return render(request, 'new_user_password.html', params)
 
-        u_data = dash_views.update_password(request, request.POST.get('token'), passwd)
+        username = update_password(request.POST.get('uuid'), passwd, request.POST.get('token'))
 
         # seems all is good, now login and return the dashboard
-        return dash_views.login_page(request, message='You have set a new password successfully. Please log in using the new password.', user={'pass': passwd, 'username': u_data['username']})
+        return login_page(request, message='You have set a new password successfully. Please log in using the new password.', user={'pass': passwd, 'username': username})
     except Exception as e:
         if settings.DEBUG: print(str(e))
+        capture_exception(e)
         return render(request, 'login.html', {'is_error': True, 'message': 'There was an error while saving the new password'})
 
 
@@ -328,12 +354,12 @@ def update_user(request, user_id):
         return {'error': True, 'message': 'There was an error while saving the user: %s' % str(e)}
     except Exception as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry_ce()
+        capture_exception(e)
         raise
 
 
 @login_required(login_url='/login')
-def manage_users(request):
+def manage_users(request, d_type):
     params = get_basic_info(request)
     u = User.objects.get(id=request.user.id)
     current_path = request.path.strip("/")
@@ -370,7 +396,7 @@ def manage_users(request):
 
     except Exception as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry.captureException()
+        capture_exception(e)
         return HttpResponse(json.dumps({'error': True, 'message': 'There was an error while managing the %s' % re.search('_(.+)$', current_path).group(1)}))
 
 
@@ -397,12 +423,12 @@ def edit_users(request, d_type):
     except DataError as e:
         transaction.rollback();
         if settings.DEBUG: terminal.tprint('%s (%s)' % (str(e), type(e)), 'fail')
-        sentry.captureException()
+        capture_exception(e)
         return JsonResponse({'error': True, 'message': 'Please check the entered data'})
 
     except Exception as e:
         if settings.DEBUG: terminal.tprint('%s (%s)' % (str(e), type(e)), 'fail')
-        sentry.captureException()
+        capture_exception(e)
         return JsonResponse({'error': True, 'message': 'There was an error while updating the database'})
 
 
@@ -438,6 +464,17 @@ def add_user(request):
         new_user.full_clean()
         new_user.save()
 
+        # assign roles
+        # ToDo: Find a way to clean the roles import
+        clear_roles(new_user)
+        for name, obj in inspect.getmembers(importlib.import_module("datahub.settings.roles"), inspect.isclass):
+            if inspect.isclass(obj):
+                if name == 'AbstractUserRole': continue
+                if obj.alias == new_user.designation:
+                    assign_role(new_user, obj)
+                    # print("The user %s is now a %s", (edit_user.username, obj.perm_name))
+                    break
+
         reg_view = RegistrationView()
         activation_link = reg_view.get_activation_key(new_user)
 
@@ -462,13 +499,13 @@ def add_user(request):
         }
         notify.send_email(email_settings)
 
-        return {'error': False, 'message': 'The user has been saved successfully'}
+        return JsonResponse({'error': False, 'message': 'The user has been saved successfully'})
     
     except ValidationError as e:
-        return {'error': True, 'message': 'There was an error while saving the user: %s' % str(e)}
+        return JsonResponse({'error': True, 'message': 'There was an error while saving the user: %s' % str(e)})
     except Exception as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry_ce()
+        capture_exception(e)
         raise
 
 
@@ -501,5 +538,5 @@ def update_user(request, user_id):
         return {'error': True, 'message': 'There was an error while saving the user: %s' % str(e)}
     except Exception as e:
         if settings.DEBUG: terminal.tprint(str(e), 'fail')
-        sentry_ce()
+        capture_exception(e)
         raise
