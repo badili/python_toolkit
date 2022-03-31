@@ -21,7 +21,9 @@ except Exception:
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from jinja2 import Environment, PackageLoader
+
+from jinja2 import Template, FileSystemLoader
+from jinja2.environment import Environment
 
 try:
     from vendor.terminal_output import Terminal
@@ -38,6 +40,26 @@ sentry_sdk.init(settings.SENTRY_DSN)
 class Emails():
     def __init__(self):
         terminal.tprint("Initializing the Email class", 'ok')
+
+
+    def initiate_send_email(self, email_settings):
+        try:
+            # print(email_settings)
+            print(settings.TEMPLATES[0]['DIRS'][0])
+            self.env = Environment()
+            self.env.loader = FileSystemLoader(settings.TEMPLATES[0]['DIRS'][0])
+
+            template = self.env.get_template(email_settings['template'])
+            email_settings['site_name'] = settings.SITE_NAME
+            email_html = template.render(email_settings)
+            cc = email_settings['cc'] if 'cc' in email_settings else None
+            use_queue = email_settings['use_queue'] if 'use_queue' in email_settings else False
+
+            Emails.send_email(email_settings['recipient_email'], email_settings['sender_email'], cc, email_settings['subject'], email_html, use_queue)
+        except Exception as e:
+            if settings.DEBUG: terminal.tprint(str(e), 'fail')
+            sentry.captureException()
+            raise Exception(str(e))
 
     def send_email(to, sender, cc, subject=None, body=None, add_to_queue=False):
         ''' sends email using a Jinja HTML template '''

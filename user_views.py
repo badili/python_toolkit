@@ -21,6 +21,8 @@ from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
 from rolepermissions.roles import get_user_roles, assign_role, remove_role, clear_roles
 from rolepermissions.permissions import available_perm_names
 # from rolepermissions.mixins import HasRoleMixin as has_role
+# 
+from datahub.settings.roles import Pi
 
 from toolkit.terminal_output import Terminal
 from vendor.notifications import Notification
@@ -288,6 +290,8 @@ def get_set_user_info(request):
             # update the session details
             User = get_user_model()
             cur_user = User.objects.get(id=request.user.id)
+            clear_roles(cur_user)
+            assign_role(cur_user, Pi)
             
             request.session['cu_designation'] = cur_user.get_designation_display()
             request.session['cu_designation_id'] = cur_user.designation
@@ -314,7 +318,7 @@ def get_set_user_info(request):
 
         return (cur_user_email, user_permissions)
 
-    except Personnel.DoesNotExist as e:
+    except User.DoesNotExist as e:
         terminal.tprint("%s: A user who is not vetted is trying to log in. Kick them out." % str(e), 'fail')
         return None
 
