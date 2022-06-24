@@ -58,8 +58,8 @@ class Emails():
             Emails.send_email(email_settings['recipient_email'], email_settings['sender_email'], cc, email_settings['subject'], email_html, use_queue)
         except Exception as e:
             if settings.DEBUG: terminal.tprint(str(e), 'fail')
-            sentry.captureException()
-            raise Exception(str(e))
+            # sentry.captureException()
+            raise 
 
     def send_email(to, sender, cc, subject=None, body=None, add_to_queue=False):
         ''' sends email using a Jinja HTML template '''
