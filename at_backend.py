@@ -1,4 +1,4 @@
-# 
+import re
 from sentry_sdk import init as sentry_init, capture_exception, capture_message
 
 from django.conf import settings
@@ -16,7 +16,11 @@ class ATBackend(BaseBackend):
         # Send a message to via the configured provider
         at_ok_sending_status_codes = settings.AT_STATUS_CODES
 
-        africastalking.initialize(settings.AT_GATEWAY['USERNAME'], settings.AT_GATEWAY['KEY'])
+        if re.match(r'\+2547\d{8}', number):
+            africastalking.initialize(settings.AT_GATEWAY['USERNAME'], settings.AT_GATEWAY['KEY'])
+        elif re.match(r'\+2567\d{8}', number):
+            africastalking.initialize(settings.UG_AT_GATEWAY['USERNAME'], settings.UG_AT_GATEWAY['KEY'])
+        
         at_sms = africastalking.SMS
 
         this_resp = at_sms.send(message, [number])
