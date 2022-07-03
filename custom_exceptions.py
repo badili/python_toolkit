@@ -10,3 +10,7 @@ class CustomDoesNotExist(Exception):
 class CustomDontLogToSentry(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
+
+class EmailedError(Exception):
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
