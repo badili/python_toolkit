@@ -182,7 +182,6 @@ class DecimalEncoder(json.JSONEncoder):
         
         return json.JSONEncoder.default(self, obj)
 
-
 def validate_phone_number(phone_no):
     # given any phone number, validates it and returns a valid number else returns None
     phone_number = re.findall('^\(?(?:\+?254|0)((?:7|1)\)?(?:[ -]?[0-9]){2}\)?(?:[ -]?[0-9]){6})$', phone_no)
@@ -241,3 +240,26 @@ def send_sentry_message(message='Test message', err_level='info', extra_data=Non
                 scope.set_extra(ed['tag'], ed['value'])
 
         sentry_sdk.capture_message(message, err_level)
+
+def process_geopoint_node_v1(column, gps_string):
+    """
+    v1: Simplifies the processing of the nodes
+    """
+    # split the data by a space as expected from odk
+    geo = gps_string.split()
+
+    # try some guessing game which column we are referring to
+    if re.search('lat', column):
+        # we have a longitude
+        return geo[0]
+    if re.search('lon', column):
+        # we have a longitude
+        return geo[1]
+    if re.search('alt', column):
+        # we have altitude 
+        return geo[2]
+    if re.search('accuracy', column):
+        # we have altitude 
+        return geo[3]
+
+    raise Exception('Unknown Destination Column: Encountered a GPS data field (%s), but I cant seem to deduce which type(latitude, longitude, altitude) the current column (%s) is.' % (gps_string, column))

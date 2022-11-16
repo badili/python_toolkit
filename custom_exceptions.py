@@ -14,3 +14,7 @@ class CustomDontLogToSentry(Exception):
 class EmailedError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
+
+class MissingRecord(Exception):
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
