@@ -48,5 +48,24 @@ class ObtainAuthToken(APIView):
         return Response(params)
 
 
-obtain_auth_token = ObtainAuthToken.as_view()
+class PazuriAuthToken(ObtainAuthToken):
+    def post(self, request, *args, **kwargs):
+        try:
+            serializer = self.serializer_class(data=request.data, context={'request': request})
+            print(request.data)
+            serializer.is_valid(raise_exception=True)
+            user = serializer.validated_data['user']
 
+            from common_func.registration import user_auth_details
+            params = user_auth_details(user.id)
+            
+            return Response(params)
+
+        except Exception as e:
+            if settings.DEBUG: terminal.tprint(str(e), 'fail')
+            sentry.captureException()
+            return JsonResponse({'error': str(e)}, status=400, safe=False)
+
+
+obtain_auth_token = ObtainAuthToken.as_view()
+pazuri_auth_token = PazuriAuthToken.as_view()

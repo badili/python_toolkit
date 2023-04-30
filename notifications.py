@@ -38,8 +38,8 @@ try:
     elif settings.SITE_NAME == 'Pazuri Records':
         # try importing stuff from PazuriPoultry
         from vendor.terminal_output import Terminal
-        from .models import SMSQueue, MessageTemplates, Personnel, Campaign, Farm, SubscriptionPayment, Batch, Production, EventsSchedule, EventsList, OtherEvents, Farm, IncomeExpense, PERSONNEL_DESIGNATION_CHOICES
-        from .common_tasks import Emails
+        from poultry.models import SMSQueue, MessageTemplates, Personnel, Campaign, Farm, SubscriptionPayment, Batch, Production, EventsSchedule, EventsList, OtherEvents, Farm, IncomeExpense, PERSONNEL_DESIGNATION_CHOICES
+        from common_func.common_tasks import Emails
     elif settings.SITE_NAME == 'BoxGirls M&E System':
         from vendor.terminal_output import Terminal
         from .common_tasks import Emails
