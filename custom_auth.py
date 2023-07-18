@@ -8,7 +8,10 @@ from rest_framework.response import Response
 from rest_framework.schemas import ManualSchema
 from rest_framework.views import APIView
 
+from raven import Client
 from .terminal_output import Terminal
+
+sentry = Client(settings.SENTRY_DSN)
 terminal = Terminal()
 
 class ObtainAuthToken(APIView):
