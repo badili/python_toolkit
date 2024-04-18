@@ -45,7 +45,7 @@ class Emails():
     def initiate_send_email(self, email_settings):
         try:
             # print(email_settings)
-            print(settings.TEMPLATES[0]['DIRS'][0])
+            # print(settings.TEMPLATES[0]['DIRS'][0])
             self.env = Environment()
             self.env.loader = FileSystemLoader(settings.TEMPLATES[0]['DIRS'][0])
 
@@ -82,6 +82,7 @@ class Emails():
         msg.attach(MIMEText(body, 'html'))
         try:
             terminal.tprint('setting up the SMTP con....', 'debug')
+            return False
             if add_to_queue == True:
                 django_rq.enqueue(queue_email, to_list, msg)
             else:
