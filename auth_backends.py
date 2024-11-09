@@ -27,3 +27,23 @@ class UsernameEmailTelBackend(ModelBackend):
 
     def authenticate(self, *args, **kwargs):
         return self._authenticate(*args, **kwargs)
+
+
+class AutoAuthenticate:
+    '''
+    Automatically authenticate and log in a user without requiring a password.
+    Useful when certain request is coming from a legit device or app eg. USSD or Whatsapp
+    '''
+    @staticmethod
+    def authenticate(tel):
+        try:
+            phone_no = validate_phone_number(tel)
+            if not phone_no:
+                return None
+
+            # get the user with that telephone no
+            cur_user = User.objects.filter(tel=phone_no).get()
+            return cur_user
+
+        except User.DoesNotExist:
+            return None
