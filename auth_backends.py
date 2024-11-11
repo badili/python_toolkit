@@ -39,6 +39,7 @@ class AutoAuthenticate:
         try:
             phone_no = validate_phone_number(tel)
             if not phone_no:
+                print('Invalid phone number (%s)' % tel)
                 return None
 
             # get the user with that telephone no
@@ -46,4 +47,5 @@ class AutoAuthenticate:
             return cur_user
 
         except User.DoesNotExist:
+            print('A user with the tel %s does not exist' % tel)
             return None
